@@ -6,6 +6,7 @@ A Go web application that analyzes a webpage URL and reports useful HTML and HTT
 
 - `GET /`: Displays a form with a URL input and analyze button.
 - `POST /`: Validates and analyzes the submitted URL.
+- `POST /api/analyze`: API endpoint for URL analysis (JSON response).
 - Reports:
   - HTML version
   - Page title
@@ -23,7 +24,7 @@ A Go web application that analyzes a webpage URL and reports useful HTML and HTT
 - `config/config.go`: Environment-based configuration.
 - `domain/web_analysis.go`: Core domain structs and associated methods for analysis response/error.
 - `handlers/common.go`: Health endpoints.
-- `handlers/webanalysis.go`: URL validation, webpage fetch, HTML parsing, and response rendering.
+- `handlers/webanalysis.go`: `WebAnalysisHandler`, analyzer interface, default HTTP analyzer implementation, and response rendering.
 - `templates/*.gohtml`: Go templates split into layout, header, content, and footer.
 - `static/js/script.js`: Client-side validation and submit button state.
 
@@ -50,6 +51,29 @@ Open [http://localhost:8080](http://localhost:8080).
 ```bash
 go build -o webpage-analysis-go ./main.go
 ./webpage-analysis-go
+```
+
+## Run Tests
+
+```bash
+go test ./...
+```
+
+## API Usage (curl)
+
+JSON request:
+
+```bash
+curl -X POST http://localhost:8080/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
+Form request:
+
+```bash
+curl -X POST http://localhost:8080/api/analyze \
+  -d "url=https://example.com"
 ```
 
 ## Docker

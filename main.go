@@ -22,9 +22,11 @@ func main() {
 
 	webHandler, err := handlers.NewWebAnalysisHandler(
 		"templates",
-		time.Duration(config.RequestTimeoutSeconds)*time.Second,
-		time.Duration(config.LinkCheckTimeoutSeconds)*time.Second,
-		config.MaxCheckedLinks,
+		handlers.NewHTTPAnalyzer(
+			time.Duration(config.RequestTimeoutSeconds)*time.Second,
+			time.Duration(config.LinkCheckTimeoutSeconds)*time.Second,
+			config.MaxCheckedLinks,
+		),
 	)
 	if err != nil {
 		log.Fatalf("initialize web handler: %v", err)
@@ -35,6 +37,7 @@ func main() {
 	r.Handle(handlers.Ok("/.well-known/live"))
 	r.Handle(http.MethodGet, "/", webHandler.Get)
 	r.Handle(http.MethodPost, "/", webHandler.Post)
+	r.Handle(http.MethodPost, "/api/analyze", webHandler.AnalyzeAPI)
 	r.ServeFiles("/static/*filepath", http.Dir("static"))
 
 	server := http.Server{Addr: config.HttpListenAddress, Handler: r}

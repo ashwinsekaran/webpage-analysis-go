@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	stdhtml "html"
@@ -36,11 +37,19 @@ var (
 	tagRegexp      = regexp.MustCompile(`(?is)<[^>]+>`)
 )
 
-type WebAnalysisHandler struct {
-	templates       *template.Template
+type Analyzer interface {
+	Analyze(ctx context.Context, rawURL string) (*domain.PageAnalysisResult, *domain.PageAnalysisError)
+}
+
+type HTTPAnalyzer struct {
 	clientTimeout   time.Duration
 	linkTimeout     time.Duration
 	maxCheckedLinks int
+}
+
+type WebAnalysisHandler struct {
+	templates *template.Template
+	analyzer  Analyzer
 }
 
 type WebAnalysisViewData struct {
@@ -49,12 +58,21 @@ type WebAnalysisViewData struct {
 	Error    *domain.PageAnalysisError
 }
 
+type APIAnalyzeRequest struct {
+	URL string `json:"url"`
+}
+
+type APIAnalyzeResponse struct {
+	Result *domain.PageAnalysisResult `json:"result,omitempty"`
+	Error  *domain.PageAnalysisError  `json:"error,omitempty"`
+}
+
 type discoveredLink struct {
 	URL      string
 	Internal bool
 }
 
-func NewWebAnalysisHandler(templateDir string, clientTimeout, linkTimeout time.Duration, maxCheckedLinks int) (*WebAnalysisHandler, error) {
+func NewHTTPAnalyzer(clientTimeout, linkTimeout time.Duration, maxCheckedLinks int) *HTTPAnalyzer {
 	if clientTimeout <= 0 {
 		clientTimeout = defaultTimeout
 	}
@@ -63,6 +81,18 @@ func NewWebAnalysisHandler(templateDir string, clientTimeout, linkTimeout time.D
 	}
 	if maxCheckedLinks <= 0 {
 		maxCheckedLinks = 150
+	}
+
+	return &HTTPAnalyzer{
+		clientTimeout:   clientTimeout,
+		linkTimeout:     linkTimeout,
+		maxCheckedLinks: maxCheckedLinks,
+	}
+}
+
+func NewWebAnalysisHandler(templateDir string, analyzer Analyzer) (*WebAnalysisHandler, error) {
+	if analyzer == nil {
+		analyzer = NewHTTPAnalyzer(defaultTimeout, defaultLinkTimeout, 150)
 	}
 
 	t, err := template.ParseFiles(
@@ -75,12 +105,7 @@ func NewWebAnalysisHandler(templateDir string, clientTimeout, linkTimeout time.D
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
 
-	return &WebAnalysisHandler{
-		templates:       t,
-		clientTimeout:   clientTimeout,
-		linkTimeout:     linkTimeout,
-		maxCheckedLinks: maxCheckedLinks,
-	}, nil
+	return &WebAnalysisHandler{templates: t, analyzer: analyzer}, nil
 }
 
 func (h *WebAnalysisHandler) Get(w http.ResponseWriter, _ *http.Request, _ httprouter.Params) {
@@ -94,19 +119,34 @@ func (h *WebAnalysisHandler) Post(w http.ResponseWriter, r *http.Request, _ http
 	}
 
 	inputURL := strings.TrimSpace(r.FormValue("url"))
-	view := WebAnalysisViewData{InputURL: inputURL}
+	result, analyzeErr := h.analyzer.Analyze(r.Context(), inputURL)
 
-	parsedURL, err := validateURL(inputURL)
-	if err != nil {
-		view.Error = domain.NewPageAnalysisError(http.StatusBadRequest, err.Error())
-		h.render(w, view)
+	view := WebAnalysisViewData{
+		InputURL: inputURL,
+		Result:   result,
+		Error:    analyzeErr,
+	}
+	h.render(w, view)
+}
+
+func (h *WebAnalysisHandler) AnalyzeAPI(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	inputURL, reqErr := parseAPIURL(r)
+	if reqErr != nil {
+		writeJSON(w, reqErr.StatusCode, APIAnalyzeResponse{Error: reqErr})
 		return
 	}
 
-	result, analyzeErr := h.analyze(r.Context(), parsedURL)
-	view.Result = result
-	view.Error = analyzeErr
-	h.render(w, view)
+	result, analyzeErr := h.analyzer.Analyze(r.Context(), inputURL)
+	if analyzeErr != nil {
+		statusCode := analyzeErr.StatusCode
+		if statusCode < 100 {
+			statusCode = http.StatusBadRequest
+		}
+		writeJSON(w, statusCode, APIAnalyzeResponse{Result: result, Error: analyzeErr})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, APIAnalyzeResponse{Result: result})
 }
 
 func (h *WebAnalysisHandler) render(w http.ResponseWriter, data WebAnalysisViewData) {
@@ -116,35 +156,46 @@ func (h *WebAnalysisHandler) render(w http.ResponseWriter, data WebAnalysisViewD
 	}
 }
 
-func validateURL(rawURL string) (*url.URL, error) {
-	if rawURL == "" {
-		return nil, errors.New("Please enter a URL to analyze")
+func parseAPIURL(r *http.Request) (string, *domain.PageAnalysisError) {
+	contentType := strings.ToLower(strings.TrimSpace(r.Header.Get(HeaderContentType)))
+	if strings.HasPrefix(contentType, "application/json") {
+		var req APIAnalyzeRequest
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&req); err != nil {
+			return "", domain.NewPageAnalysisError(http.StatusBadRequest, "Invalid JSON payload. Expected: {\"url\":\"https://example.com\"}")
+		}
+		return strings.TrimSpace(req.URL), nil
 	}
 
-	parsed, err := url.ParseRequestURI(rawURL)
-	if err != nil {
-		return nil, errors.New("Enter a valid URL, for example https://example.com")
+	if err := r.ParseForm(); err != nil {
+		return "", domain.NewPageAnalysisError(http.StatusBadRequest, "Invalid form payload")
 	}
 
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return nil, errors.New("Only http:// and https:// URLs are supported")
-	}
-
-	if parsed.Host == "" || strings.Contains(parsed.Host, " ") {
-		return nil, errors.New("URL must include a valid host, for example https://example.com")
-	}
-
-	return parsed, nil
+	return strings.TrimSpace(r.FormValue("url")), nil
 }
 
-func (h *WebAnalysisHandler) analyze(parentCtx context.Context, parsedURL *url.URL) (*domain.PageAnalysisResult, *domain.PageAnalysisError) {
-	ctx, cancel := context.WithTimeout(parentCtx, h.clientTimeout)
+func writeJSON(w http.ResponseWriter, statusCode int, payload APIAnalyzeResponse) {
+	w.Header().Set(HeaderContentType, "application/json; charset=utf-8")
+	w.WriteHeader(statusCode)
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		http.Error(w, "{\"error\":{\"statusCode\":500,\"description\":\"Unable to encode response\"}}", http.StatusInternalServerError)
+	}
+}
+
+func (a *HTTPAnalyzer) Analyze(parentCtx context.Context, rawURL string) (*domain.PageAnalysisResult, *domain.PageAnalysisError) {
+	parsedURL, err := validateURL(rawURL)
+	if err != nil {
+		return nil, domain.NewPageAnalysisError(http.StatusBadRequest, err.Error())
+	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, a.clientTimeout)
 	defer cancel()
 
 	redirects := 0
 	client := &http.Client{
-		Timeout: h.clientTimeout,
+		Timeout: a.clientTimeout,
 		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 			redirects = len(via)
 			if len(via) > 10 {
@@ -175,7 +226,7 @@ func (h *WebAnalysisHandler) analyze(parentCtx context.Context, parsedURL *url.U
 
 	headings, rawLinks, hasLoginForm, htmlVersion, title := analyzeHTML(bodyBytes)
 	links := normalizeLinks(response.Request.URL, rawLinks)
-	inaccessible, checked, skipped := h.countInaccessibleLinks(parentCtx, links)
+	inaccessible, checked, skipped := a.countInaccessibleLinks(parentCtx, links)
 
 	result := &domain.PageAnalysisResult{
 		RequestedURL:       parsedURL.String(),
@@ -206,6 +257,28 @@ func (h *WebAnalysisHandler) analyze(parentCtx context.Context, parsedURL *url.U
 	}
 
 	return result, nil
+}
+
+func validateURL(rawURL string) (*url.URL, error) {
+	if rawURL == "" {
+		return nil, errors.New("Please enter a URL to analyze")
+	}
+
+	parsed, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return nil, errors.New("Enter a valid URL, for example https://example.com")
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return nil, errors.New("Only http:// and https:// URLs are supported")
+	}
+
+	if parsed.Host == "" || strings.Contains(parsed.Host, " ") {
+		return nil, errors.New("URL must include a valid host, for example https://example.com")
+	}
+
+	return parsed, nil
 }
 
 func mapRequestError(err error) *domain.PageAnalysisError {
@@ -327,7 +400,7 @@ func normalizeLinks(baseURL *url.URL, links []discoveredLink) []discoveredLink {
 	return normalized
 }
 
-func (h *WebAnalysisHandler) countInaccessibleLinks(parentCtx context.Context, links []discoveredLink) (int, int, int) {
+func (a *HTTPAnalyzer) countInaccessibleLinks(parentCtx context.Context, links []discoveredLink) (int, int, int) {
 	if len(links) == 0 {
 		return 0, 0, 0
 	}
@@ -345,12 +418,12 @@ func (h *WebAnalysisHandler) countInaccessibleLinks(parentCtx context.Context, l
 	slices.Sort(unique)
 	checkedTargets := unique
 	skipped := 0
-	if len(unique) > h.maxCheckedLinks {
-		checkedTargets = unique[:h.maxCheckedLinks]
-		skipped = len(unique) - h.maxCheckedLinks
+	if len(unique) > a.maxCheckedLinks {
+		checkedTargets = unique[:a.maxCheckedLinks]
+		skipped = len(unique) - a.maxCheckedLinks
 	}
 
-	ctx, cancel := context.WithTimeout(parentCtx, h.clientTimeout)
+	ctx, cancel := context.WithTimeout(parentCtx, a.clientTimeout)
 	defer cancel()
 
 	const workers = 8
@@ -365,7 +438,7 @@ func (h *WebAnalysisHandler) countInaccessibleLinks(parentCtx context.Context, l
 		go func() {
 			defer wg.Done()
 			for target := range jobs {
-				results <- result{inaccessible: h.isLinkInaccessible(ctx, target)}
+				results <- result{inaccessible: a.isLinkInaccessible(ctx, target)}
 			}
 		}()
 	}
@@ -389,11 +462,11 @@ func (h *WebAnalysisHandler) countInaccessibleLinks(parentCtx context.Context, l
 	return inaccessible, len(checkedTargets), skipped
 }
 
-func (h *WebAnalysisHandler) isLinkInaccessible(parentCtx context.Context, target string) bool {
-	ctx, cancel := context.WithTimeout(parentCtx, h.linkTimeout)
+func (a *HTTPAnalyzer) isLinkInaccessible(parentCtx context.Context, target string) bool {
+	ctx, cancel := context.WithTimeout(parentCtx, a.linkTimeout)
 	defer cancel()
 
-	client := &http.Client{Timeout: h.linkTimeout}
+	client := &http.Client{Timeout: a.linkTimeout}
 	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, target, nil)
 	if err != nil {
 		return true
