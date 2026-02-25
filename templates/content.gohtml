@@ -1,0 +1,119 @@
+{{define "content"}}
+<div class="columns is-centered">
+    <div class="column is-10-tablet is-8-desktop">
+        <div class="box">
+            <form id="analysis-form" method="post" action="/">
+                <div class="field">
+                    <label class="label" for="url">URL</label>
+                    <div class="control">
+                        <input id="url" name="url" class="input" type="url" placeholder="https://example.com" required value="{{.InputURL}}">
+                    </div>
+                    <p class="help">Use a full URL including <code>http://</code> or <code>https://</code>.</p>
+                </div>
+
+                <div id="client-error" class="notification is-danger is-light is-hidden" role="alert"></div>
+
+                <div class="field">
+                    <div class="control">
+                        <button id="analyze-btn" class="button is-link" type="submit">Analyze</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        {{if .Error}}
+        <div class="notification is-danger is-light">
+            <p><strong>Error (HTTP {{.Error.StatusCode}}):</strong> {{.Error.Description}}</p>
+        </div>
+        {{end}}
+
+        {{if .Result}}
+        <div class="box">
+            <h2 class="title is-4">Analysis Result</h2>
+            <p class="mb-3"><strong>Requested URL:</strong> {{.Result.RequestedURL}}</p>
+            <p class="mb-3"><strong>Final URL:</strong> {{.Result.FinalURL}}</p>
+
+            <div class="tags mb-3">
+                <span class="tag {{.Result.StatusTagClass}} is-medium">
+                    <span class="{{.Result.StatusCircleClass}} mr-2">●</span>{{.Result.StatusText}}
+                </span>
+            </div>
+
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <tbody>
+                    <tr>
+                        <th>HTML Version</th>
+                        <td>{{.Result.HTMLVersion}}</td>
+                    </tr>
+                    <tr>
+                        <th>Page Title</th>
+                        <td>{{.Result.PageTitle}}</td>
+                    </tr>
+                    <tr>
+                        <th>Internal Links</th>
+                        <td>{{.Result.InternalLinks}}</td>
+                    </tr>
+                    <tr>
+                        <th>External Links</th>
+                        <td>{{.Result.ExternalLinks}}</td>
+                    </tr>
+                    <tr>
+                        <th>Total Links</th>
+                        <td>{{.Result.TotalLinks}}</td>
+                    </tr>
+                    <tr>
+                        <th>Inaccessible Links</th>
+                        <td>{{.Result.InaccessibleLinks}} (checked {{.Result.CheckedLinks}}{{if gt .Result.SkippedLinkChecks 0}}, skipped {{.Result.SkippedLinkChecks}}{{end}})</td>
+                    </tr>
+                    <tr>
+                        <th>Login Form Present</th>
+                        <td>{{if .Result.HasLoginForm}}Yes{{else}}No{{end}}</td>
+                    </tr>
+                    <tr>
+                        <th>Response Time</th>
+                        <td>{{.Result.ResponseTime}}</td>
+                    </tr>
+                    <tr>
+                        <th>Content-Type</th>
+                        <td>{{.Result.ContentType}}</td>
+                    </tr>
+                    <tr>
+                        <th>Content-Length</th>
+                        <td>{{if lt .Result.ContentLength 0}}Unknown{{else}}{{.Result.ContentLength}}{{end}}</td>
+                    </tr>
+                    <tr>
+                        <th>Redirects</th>
+                        <td>{{.Result.RedirectCount}}</td>
+                    </tr>
+                    <tr>
+                        <th>Server</th>
+                        <td>{{if .Result.ServerHeader}}{{.Result.ServerHeader}}{{else}}Unknown{{end}}</td>
+                    </tr>
+                    <tr>
+                        <th>Analyzed At</th>
+                        <td>{{.Result.AnalysisFinishedAt}}</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="box">
+            <h3 class="title is-5">Heading Breakdown</h3>
+            <div class="columns is-multiline">
+                {{range .Result.HeadingCounts}}
+                <div class="column is-4-desktop is-6-tablet is-12-mobile">
+                    <article class="message is-info is-light">
+                        <div class="message-body">
+                            <strong>H{{.Level}}</strong>: {{.Count}}
+                        </div>
+                    </article>
+                </div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{end}}

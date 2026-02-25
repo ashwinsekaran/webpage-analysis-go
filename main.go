@@ -17,13 +17,25 @@ import (
 )
 
 func main() {
-
 	var config conf.Config
 	envconfig.MustProcess("", &config)
 
-	var r = httprouter.New()
+	webHandler, err := handlers.NewWebAnalysisHandler(
+		"templates",
+		time.Duration(config.RequestTimeoutSeconds)*time.Second,
+		time.Duration(config.LinkCheckTimeoutSeconds)*time.Second,
+		config.MaxCheckedLinks,
+	)
+	if err != nil {
+		log.Fatalf("initialize web handler: %v", err)
+	}
+
+	r := httprouter.New()
 	r.Handle(handlers.Ok("/.well-known/ready"))
 	r.Handle(handlers.Ok("/.well-known/live"))
+	r.Handle(http.MethodGet, "/", webHandler.Get)
+	r.Handle(http.MethodPost, "/", webHandler.Post)
+	r.ServeFiles("/static/*filepath", http.Dir("static"))
 
 	server := http.Server{Addr: config.HttpListenAddress, Handler: r}
 
@@ -39,6 +51,7 @@ func main() {
 
 	<-shutdown
 	log.Println("shutting down")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
