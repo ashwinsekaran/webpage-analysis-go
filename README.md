@@ -32,6 +32,13 @@ A Go web application that analyzes a webpage URL and reports useful HTML and HTT
 - `templates/*.gohtml`: Go templates split into layout, header, content, and footer.
 - `static/js/script.js`: Client-side validation and submit button state.
 
+## Key Libraries
+
+- `net/http`: Core HTTP server/client package used for request handling, outbound fetches, and response writing.
+- `html/template`: Server-side HTML templating used to render the web UI safely.
+- `github.com/julienschmidt/httprouter`: Lightweight high-performance HTTP router used for route registration and path handling.
+- `github.com/kelseyhightower/envconfig`: Loads environment variables into typed config structs with defaults.
+
 ## Configuration
 
 Environment variables:
