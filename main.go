@@ -17,9 +17,11 @@ import (
 )
 
 func main() {
+	// Load runtime configuration from environment variables using defaults from tags.
 	var config conf.Config
 	envconfig.MustProcess("", &config)
 
+	// Construct the analyzer and web handlers up front so startup fails fast on misconfiguration.
 	webHandler, err := handlers.NewWebAnalysisHandler(
 		"templates",
 		handlers.NewHTTPAnalyzer(
@@ -40,6 +42,7 @@ func main() {
 	r.Handle(http.MethodPost, "/api/analyze", webHandler.AnalyzeAPI)
 	r.ServeFiles("/static/*filepath", http.Dir("static"))
 
+	// Run a graceful server that stops on SIGINT/SIGTERM and allows in-flight requests to finish.
 	server := http.Server{Addr: config.HttpListenAddress, Handler: r}
 
 	shutdown := make(chan os.Signal, 1)

@@ -2,16 +2,21 @@ package domain
 
 import "net/http"
 
+// PageAnalysisError is a user-facing error payload returned by page analysis flows.
 type PageAnalysisError struct {
+	// StatusCode mirrors an HTTP status-style code suitable for UI/API responses.
 	StatusCode  int
+	// Description is a readable explanation of the failure reason.
 	Description string
 }
 
+// HeadingCount stores the number of heading tags found for a given level (h1-h6).
 type HeadingCount struct {
 	Level int
 	Count int
 }
 
+// PageAnalysisResult holds all extracted metadata and computed statistics for a page.
 type PageAnalysisResult struct {
 	RequestedURL       string
 	FinalURL           string
@@ -37,10 +42,12 @@ type PageAnalysisResult struct {
 	AnalysisFinishedAt string
 }
 
+// NewPageAnalysisError builds a PageAnalysisError with the provided status and description.
 func NewPageAnalysisError(statusCode int, description string) *PageAnalysisError {
 	return &PageAnalysisError{StatusCode: statusCode, Description: description}
 }
 
+// ApplyStatusPresentation maps the HTTP status code to UI style classes.
 func (r *PageAnalysisResult) ApplyStatusPresentation() {
 	if r == nil {
 		return
