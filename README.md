@@ -7,15 +7,19 @@ A Go web application that analyzes a webpage URL and reports useful HTML and HTT
 - `GET /`: Displays a form with a URL input and analyze button.
 - `POST /`: Validates and analyzes the submitted URL.
 - `POST /api/analyze`: API endpoint for URL analysis (JSON response).
+- `GET /.well-known/ready`: Readiness probe endpoint.
+- `GET /.well-known/live`: Liveness probe endpoint.
 - Reports:
   - HTML version
   - Page title
-  - HTTP status code with color indicator (green for `200`, red for `4xx/5xx`)
+  - HTTP status code with color indicator (green for `200`, yellow for `1xx-3xx` except `200`, red for `4xx/5xx`)
   - Heading counts (`h1` to `h6`)
   - Internal and external links
+  - Total links
   - Inaccessible links count
+  - Checked links and skipped link checks (when max link check limit is reached)
   - Login form detection
-  - Additional response details (content type, content length, redirect count, response time, server header, final URL)
+  - Additional response details (requested URL, final URL, content type, content length, redirect count, response time, server header, analysis finished timestamp)
 - Displays a useful error message with HTTP status code when URL parsing/fetching fails.
 
 ## Project Structure
