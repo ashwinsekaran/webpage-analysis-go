@@ -114,16 +114,16 @@ func TestNormalizeLinks(t *testing.T) {
 
 func TestWebAnalysisHandlerPostUsesAnalyzer(t *testing.T) {
 	templateDir := t.TempDir()
-	writeTemplate(t, filepath.Join(templateDir, "layout.gohtml"), `{{define "layout"}}{{template "header" .}}{{template "content" .}}{{template "footer" .}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "header.gohtml"), `{{define "header"}}HEADER{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "content.gohtml"), `{{define "content"}}{{.InputURL}}|{{if .Result}}{{.Result.StatusText}}{{end}}{{if .Error}}|{{.Error.Description}}{{end}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "footer.gohtml"), `{{define "footer"}}FOOTER{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "layout.gohtml"), `{{define "layout"}}{{template "header" .}}{{template "page" .}}{{template "footer" .}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "header.gohtml"), `{{define "header"}}HEADER{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "webanalysis.gohtml"), `{{define "page"}}{{.InputURL}}|{{if .Result}}{{.Result.StatusText}}{{end}}{{if .Error}}|{{.Error.Description}}{{end}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "footer.gohtml"), `{{define "footer"}}FOOTER{{end}}`)
 
 	mock := &mockAnalyzer{
 		result: &domain.PageAnalysisResult{StatusText: "200 OK"},
 	}
 
-	h, err := NewWebAnalysisHandler(templateDir, mock)
+	h, err := NewWebAnalysisHandler(templateDir, "webanalysis.gohtml", mock)
 	if err != nil {
 		t.Fatalf("create handler: %v", err)
 	}
@@ -151,10 +151,10 @@ func TestWebAnalysisHandlerPostUsesAnalyzer(t *testing.T) {
 
 func TestWebAnalysisHandlerAnalyzeAPISuccess(t *testing.T) {
 	templateDir := t.TempDir()
-	writeTemplate(t, filepath.Join(templateDir, "layout.gohtml"), `{{define "layout"}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "header.gohtml"), `{{define "header"}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "content.gohtml"), `{{define "content"}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "footer.gohtml"), `{{define "footer"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "layout.gohtml"), `{{define "layout"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "header.gohtml"), `{{define "header"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "webanalysis.gohtml"), `{{define "page"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "footer.gohtml"), `{{define "footer"}}{{end}}`)
 
 	mock := &mockAnalyzer{
 		result: &domain.PageAnalysisResult{
@@ -163,7 +163,7 @@ func TestWebAnalysisHandlerAnalyzeAPISuccess(t *testing.T) {
 		},
 	}
 
-	h, err := NewWebAnalysisHandler(templateDir, mock)
+	h, err := NewWebAnalysisHandler(templateDir, "webanalysis.gohtml", mock)
 	if err != nil {
 		t.Fatalf("create handler: %v", err)
 	}
@@ -192,12 +192,12 @@ func TestWebAnalysisHandlerAnalyzeAPISuccess(t *testing.T) {
 
 func TestWebAnalysisHandlerAnalyzeAPIBadJSON(t *testing.T) {
 	templateDir := t.TempDir()
-	writeTemplate(t, filepath.Join(templateDir, "layout.gohtml"), `{{define "layout"}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "header.gohtml"), `{{define "header"}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "content.gohtml"), `{{define "content"}}{{end}}`)
-	writeTemplate(t, filepath.Join(templateDir, "footer.gohtml"), `{{define "footer"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "layout.gohtml"), `{{define "layout"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "header.gohtml"), `{{define "header"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "webanalysis.gohtml"), `{{define "page"}}{{end}}`)
+	writeTemplate(t, filepath.Join(templateDir, "common", "footer.gohtml"), `{{define "footer"}}{{end}}`)
 
-	h, err := NewWebAnalysisHandler(templateDir, &mockAnalyzer{})
+	h, err := NewWebAnalysisHandler(templateDir, "webanalysis.gohtml", &mockAnalyzer{})
 	if err != nil {
 		t.Fatalf("create handler: %v", err)
 	}
@@ -223,6 +223,9 @@ func TestWebAnalysisHandlerAnalyzeAPIBadJSON(t *testing.T) {
 
 func writeTemplate(t *testing.T, path, content string) {
 	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create template dir for %s: %v", path, err)
+	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write template %s: %v", path, err)
 	}

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -99,18 +100,28 @@ func NewHTTPAnalyzer(clientTimeout, linkTimeout time.Duration, maxCheckedLinks i
 	}
 }
 
-// NewWebAnalysisHandler parses templates and returns a handler backed by the provided analyzer.
-func NewWebAnalysisHandler(templateDir string, analyzer Analyzer) (*WebAnalysisHandler, error) {
+// NewWebAnalysisHandler parses common templates plus a handler-specific page template.
+func NewWebAnalysisHandler(templateDir, pageTemplate string, analyzer Analyzer) (*WebAnalysisHandler, error) {
 	if analyzer == nil {
 		analyzer = NewHTTPAnalyzer(defaultTimeout, defaultLinkTimeout, 150)
 	}
 
-	t, err := template.ParseFiles(
-		templateDir+"/layout.gohtml",
-		templateDir+"/header.gohtml",
-		templateDir+"/content.gohtml",
-		templateDir+"/footer.gohtml",
-	)
+	pageTemplate = strings.TrimSpace(pageTemplate)
+	if pageTemplate == "" {
+		return nil, fmt.Errorf("page template cannot be empty")
+	}
+
+	commonFiles, err := filepath.Glob(filepath.Join(templateDir, "common", "*.gohtml"))
+	if err != nil {
+		return nil, fmt.Errorf("list common templates: %w", err)
+	}
+	if len(commonFiles) == 0 {
+		return nil, fmt.Errorf("no common templates found in %s", filepath.Join(templateDir, "common"))
+	}
+
+	templateFiles := append(commonFiles, filepath.Join(templateDir, pageTemplate))
+
+	t, err := template.ParseFiles(templateFiles...)
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}

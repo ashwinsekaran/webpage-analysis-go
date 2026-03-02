@@ -29,7 +29,8 @@ A Go web application that analyzes a webpage URL and reports useful HTML and HTT
 - `domain/web_analysis.go`: Core domain structs and associated methods for analysis response/error.
 - `handlers/common.go`: Health endpoints.
 - `handlers/webanalysis.go`: `WebAnalysisHandler`, analyzer interface, default HTTP analyzer implementation, and response rendering.
-- `templates/*.gohtml`: Go templates split into layout, header, content, and footer.
+- `templates/common/*.gohtml`: Shared layout parts (`layout`, `header`, `footer`) reused across handlers/pages.
+- `templates/webanalysis.gohtml`: Page template for the web analysis handler.
 - `static/js/script.js`: Client-side validation and submit button state.
 
 ## Key Libraries

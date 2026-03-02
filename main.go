@@ -24,6 +24,7 @@ func main() {
 	// Construct the analyzer and web handlers up front so startup fails fast on misconfiguration.
 	webHandler, err := handlers.NewWebAnalysisHandler(
 		"templates",
+		"webanalysis.gohtml",
 		handlers.NewHTTPAnalyzer(
 			time.Duration(config.RequestTimeoutSeconds)*time.Second,
 			time.Duration(config.LinkCheckTimeoutSeconds)*time.Second,
